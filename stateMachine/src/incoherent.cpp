@@ -1,6 +1,7 @@
 #include "incoherent.h"
 #include "spiMaster.h"
-#include "modules.h"
+
+IncoherentDetector incoherentDetector;
 
 IncoherentDetector::IncoherentDetector() {
     // Real setup is in incoherentSetup, in setup() function

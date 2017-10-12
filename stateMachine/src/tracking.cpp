@@ -1,38 +1,32 @@
-#include <tracking.h>
-#include <pidData.h>
-#include <main.h>
-#include <spiMaster.h>
-#include <incoherent.h>
-#include <pid.h>
-#include <mirrorDriver.h>
-#include <states.h>
-#include "modules.h"
+#include "tracking.h"
+#include "pidData.h"
+#include "main.h"
+#include "spiMaster.h"
+#include "incoherent.h"
+#include "pidController.h"
+#include "mirrorDriver.h"
+#include "states.h"
 
 /* *** Private variables *** */
 
-mirrorOutput lastPidOut;
-adcSample lastAdcRead;
-volatile unsigned samplesProcessed = 0;
-volatile bool enteringTracking = false;
-volatile bool lockedOn = false;
-volatile uint64_t numLockedOn = 0;
-volatile uint64_t totalPowerReceivedBeforeIncoherent = 0;
-volatile uint64_t totalPowerReceived = 0;
-const uint64_t maxPower = 1ULL << 32;
+Pointer pointer;
 
 // void sendOutput(mirrorOutput& output);
 
-void trackingSetup() {
+Pointer::Pointer() {
+}
+
+void Pointer::trackingSetup() {
     // Begin dma transaction
     pidDataSetup();
 }
 
-void enterTracking() {
+void Pointer::enterTracking() {
     enteringTracking = true; // Set this flag that we want to enter tracking mode, but the real setup work is done in firstLoopTracking()
     // This is because enterTracking() is called in an interrupt before the main loop is finished doing its thing
 }
 
-void firstLoopTracking() {
+void Pointer::firstLoopTracking() {
     noInterrupts();
     numLockedOn = 0;
     samplesProcessed = 0;
@@ -41,20 +35,20 @@ void firstLoopTracking() {
     totalPowerReceived = 0;
     incoherentDetector.incoherentSetup();
     interrupts();
-    pidSetup();
+    pid.pidSetup();
 
-    debugPrintf("About to clear dma: offset is (this might be high) %d\n", adcGetOffset());
-    adcStartSampling();
-    assert(!adcSampleReady());
-    debugPrintf("Cleared dma: offset is (this should be <= 4) %d\n", adcGetOffset());
+    debugPrintf("About to clear dma: offset is (this might be high) %d\n", quadCell.adcGetOffset());
+    quadCell.adcStartSampling();
+    assert(!quadCell.adcSampleReady());
+    debugPrintf("Cleared dma: offset is (this should be <= 4) %d\n", quadCell.adcGetOffset());
     assert(!enteringTracking);
     enterPidData();
     debugPrintf("Entered tracking\n");
-    debugPrintf("Offset %d\n", adcGetOffset());
+    debugPrintf("Offset %d\n", quadCell.adcGetOffset());
     mirrorDriver.highVoltageEnable(true);
 }
 
-void leaveTracking() {
+void Pointer::leaveTracking() {
     leavePidData();
     noInterrupts();
     enteringTracking = false;
@@ -66,7 +60,7 @@ void leaveTracking() {
     interrupts();
 }
 
-void logPidSample(const volatile pidSample& s) {
+void Pointer::logPidSample(const volatile pidSample& s) {
     lastAdcRead.copy(s.sample);
     lastPidOut.copy(s.out);
     totalPowerReceivedBeforeIncoherent += s.sample.a;
@@ -81,7 +75,7 @@ void logPidSample(const volatile pidSample& s) {
     samplesProcessed++;
 }
 
-void pidProcess(const volatile adcSample& s) {
+void Pointer::pidProcess(const volatile adcSample& s) {
     adcSample incoherentOutput;
     incoherentDetector.incoherentProcess(s, incoherentOutput);
     lockedOn = false;
@@ -94,9 +88,8 @@ void pidProcess(const volatile adcSample& s) {
         if (state == TRACKING_STATE) {
             double xpos = 0xbeefabcd;
             double ypos = 0xbeefdcba;
-            double theta = 0;
             incoherentDetector.incoherentDisplacement(incoherentOutput, xpos, ypos, theta);
-            pidCalculate(xpos, ypos, out);
+            pid.pidCalculate(xpos, ypos, out);
             if (samplesProcessed % (4000 / 10) == 0) {
                 mirrorDriver.sendMirrorOutput(out);
             }
@@ -118,27 +111,27 @@ void pidProcess(const volatile adcSample& s) {
     logPidSample(samplePid);
 }
 
-void taskTracking() {
+void Pointer::taskTracking() {
     if (enteringTracking) {
         enteringTracking = false;
         firstLoopTracking();
     }
 
     if (micros() % 100 == 0) {
-        assert(adcGetOffset() < 2); // We should be able to keep up with data generation
-        if (adcGetOffset() >= 2) {
-            debugPrintf("Offset is too high! It is %d\n", adcGetOffset());
+        assert(quadCell.adcGetOffset() < 2); // We should be able to keep up with data generation
+        if (quadCell.adcGetOffset() >= 2) {
+            debugPrintf("Offset is too high! It is %d\n", quadCell.adcGetOffset());
         }
     }
-    if (adcSampleReady()) {
-        volatile adcSample s = *adcGetSample();
+    if (quadCell.adcSampleReady()) {
+        volatile adcSample s = *quadCell.adcGetSample();
         //s.axis1 = samplesProcessed; // TODO: remove
         pidProcess(s);
     }
     taskPidData();
 }
 
-void trackingHeartbeat() {
+void Pointer::trackingHeartbeat() {
     pidDataHeartbeat();
     char lastAdcReadBuf[62];
     char lastPidOutBuf[62];
@@ -153,18 +146,18 @@ void trackingHeartbeat() {
     debugPrintf("X %d Y %d\n", (a + d - b - c), a + b - c - d);
 }
 
-void enterCalibration() {
+void Pointer::enterCalibration() {
     enterTracking();
 }
 
-void leaveCalibration() {
+void Pointer::leaveCalibration() {
     leaveTracking();
 }
 
-void taskCalibration() {
+void Pointer::taskCalibration() {
     taskTracking();
 }
 
-void calibrationHeartbeat() {
+void Pointer::calibrationHeartbeat() {
     trackingHeartbeat();
 }

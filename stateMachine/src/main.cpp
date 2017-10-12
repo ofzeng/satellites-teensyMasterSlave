@@ -3,7 +3,6 @@
 #include "states.h"
 #include "spiMaster.h"
 #include "tracking.h"
-#include "modules.h"
 
 const volatile bool SPI2_LOOPBACK = false;
 
@@ -46,10 +45,10 @@ void setup() {
   spiSlave.packet_setup();
   debugPrintf("Done.\n");
   debugPrintf("Setting up dma:\n");
-  spiMasterSetup();
+  quadCell.spiMasterSetup();
   debugPrintf("Done!\n");
   debugPrintf("Setting up tracking:\n");
-  trackingSetup();
+  pointer.trackingSetup();
   debugPrintf("Done!\n");
   state = IDLE_STATE;
   delay(1000);
@@ -79,22 +78,21 @@ void heartbeat() {
 
 extern volatile unsigned int frontOfBuffer, backOfBuffer;
 void heartbeat2() {
-    debugPrintf(", last state %d, last read %d, dma offset %d %d %d", lastLoopState, lastAnalogRead, adcGetOffset(), backOfBuffer, frontOfBuffer);
-    debugPrintf(", %d loops, time alive %d, numSamplesRead %d\n", numLoops, timeAlive, numSamplesRead);
+    debugPrintf(", last state %d, last read %d", lastLoopState, lastAnalogRead);
+    debugPrintf(", %d loops, time alive %d, numSamplesRead %d\n", numLoops, timeAlive, quadCell.numSamplesRead);
     debugPrintf("%d last, %d max, %d fast, %d med, %d slow loops\n", lastLoopTime, maxLoopTime, numFastLoops, numMediumLoops, numSlowLoops);
+    quadCell.quadCellHeartBeat();
+
+    debugPrintf("pid._dt: %d\n", (int) (pid._dt * 10000));
 }
 
-extern volatile int numFail;
-extern volatile int numSuccess;
-extern volatile int numStartCalls;
-extern volatile int numSpi0Calls;
 void heartbeat3() {
     if (state == TRACKING_STATE) {
-        trackingHeartbeat();
+        pointer.trackingHeartbeat();
     } else if (state == CALIBRATION_STATE) {
-        calibrationHeartbeat();
+        pointer.calibrationHeartbeat();
     }
-    debugPrintf("DMA Fail %d success %d starts %d spi0s %d\n", numFail, numSuccess, numStartCalls, numSpi0Calls);
+
     debugPrintf("-----------------------\n");
 }
 
@@ -107,9 +105,9 @@ void leaveCurrentState() {
     if (previousState == IDLE_STATE) {
         //leaveIdle(); // Nothing to do here
     } else if (previousState == TRACKING_STATE) {
-        leaveTracking();
+        pointer.leaveTracking();
     } else if (previousState == CALIBRATION_STATE) {
-        leaveCalibration();
+        pointer.leaveCalibration();
     }
 }
 
@@ -117,9 +115,9 @@ void enterNextState() {
     if (state == IDLE_STATE) {
         //enterIdle(); // Nothing to do here
     } else if (state == TRACKING_STATE) {
-        enterTracking();
+        pointer.enterTracking();
     } else if (state == CALIBRATION_STATE) {
-        enterCalibration();
+        pointer.enterCalibration();
     }
 }
 
@@ -136,9 +134,9 @@ void checkTasks(void) {
     if (state == IDLE_STATE) {
         taskIdle();
     } else if (state == TRACKING_STATE) {
-        taskTracking();
+        pointer.taskTracking();
     } else if (state == CALIBRATION_STATE) {
-        taskCalibration();
+        pointer.taskCalibration();
     }
 
     // Save this into a long because elapsedMillis is not guaranteed in interrupts

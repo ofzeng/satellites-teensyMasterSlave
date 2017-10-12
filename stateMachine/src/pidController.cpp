@@ -1,30 +1,24 @@
 #include "main.h"
-#include "mirrorDriver.h"
+#include "pidController.h"
 
-double _dt;
-double _max;
-double _min;
-double _Kp;
-double _Kd;
-double _Ki;
-double _pre_error[2] = {0,0};
-double _integral[2] = {0,0};
-double _sp[2] = {0,0}; // centered position
+Pid pid;
 
-void pidSetup(){
+Pid::Pid() {
+        _dt = 0.1;
 
-    _dt = 0.1;
+        // set gain or iterate to find gain???
+        _Kp = 0.1;
+        _Ki = 0.5;
+        _Kd = 0.01;
 
-    // set gain or iterate to find gain???
-    _Kp = 0.1;
-    _Ki = 0.5;
-    _Kd = 0.01;
-
-    _max = 100;
-    _min = -100;
+        _max = 100;
+        _min = -100;
 }
 
-void pidCalculate(double pv_x, double pv_y, mirrorOutput& out){
+void Pid::pidSetup(){
+}
+
+void Pid::pidCalculate(double pv_x, double pv_y, mirrorOutput& out){
 
     // Calculate error
     double error[2] = {(_sp[0] - pv_x), (_sp[1] - pv_y)};
