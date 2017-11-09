@@ -172,7 +172,25 @@ void transmitH(uint16_t *buf, bool verbos) {
     if (responseNumber == RESPONSE_MIRROR_DATA && linesLogged < LINES_TO_LOG) {
         linesLogged += 1;
         for (int j = checksumIndex - (15 * 24); j < checksumIndex; j+=24) {
-            for (int k = 0; k < 22; k+=2) {
+          //The first four numbers are integers, the second four are floats, and the final four are currently
+          //ints but will become floats
+            for (int k = 0; k <= 6; k+=2) {
+              //Note that getBuf returns an int (16 bits). To create a 32-bit unsigned int, we read in the 
+              //first 16 bits of the number, shift them over by 16, and append the last 16 bits of this
+              //number.
+                fout << (int) (((unsigned int) getBuf(to_send, j + k)) * (1 << 16) + (unsigned int) getBuf(to_send, j + k + 1)) << ",";
+            }
+            for (int k = 8; k <= 14; k+=2) {
+              //Relies on particular formatting from the slave. If a float pointer is cast
+              //to an unsigned int pointer, the value that the unsigned int pointer references can be
+              //converted back to the original float by the process seen below. That is, data represents
+              //the unsigned int value the float pointer was converted to and dataFloat points to the 
+              //original float that was transmitted by the slave.
+                unsigned int data = (((unsigned int) getBuf(to_send, j + k)) * (1 << 16) + (unsigned int) getBuf(to_send, j + k + 1));
+                float* dataFloat = (float*)&data;
+                fout << *dataFloat << ",";
+            }
+            for (int k = 16; k <= 20; k+=2) {
                 fout << (int) (((unsigned int) getBuf(to_send, j + k)) * (1 << 16) + (unsigned int) getBuf(to_send, j + k + 1)) << ",";
             }
             fout << (int) (getBuf(to_send, j + 22) * (1 << 16) + getBuf(to_send, j + 22 + 1)) << "," << errors << "," << computedChecksum << "," << getBuf(to_send, checksumIndex) << endl;
